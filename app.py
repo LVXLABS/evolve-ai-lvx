@@ -5,7 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+client = try:
+    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+except Exception as e:
+    print(f"OpenAI client error: {e}")
+    client = None
+
 
 @app.route('/manifest.json')
 def manifest():
