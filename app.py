@@ -1,109 +1,78 @@
 from flask import Flask, send_from_directory
-from openai import OpenAI
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
-client = try:
+
+# Try to import OpenAI, but continue if it fails
+try:
+    from openai import OpenAI
     client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    openai_available = True
 except Exception as e:
-    print(f"OpenAI client error: {e}")
+    print(f"OpenAI not available: {e}")
     client = None
+    openai_available = False
 
+@app.route('/manifest.json')
+def manifest():
+    return {
+        "name": "E-Volve.ai - LVX Labs",
+        "short_name": "E-Volve.ai",
+        "description": "AI-Powered TikTok Strategy Generator by LVX Labs",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#000000",
+        "theme_color": "#00ff00",
+        "orientation": "portrait",
+        "icons": [
+            {
+                "src": "/static/icon-192.jpg",
+                "sizes": "192x192",
+                "type": "image/jpeg"
+            },
+            {
+                "src": "/static/icon-512.jpg",
+                "sizes": "512x512",
+                "type": "image/jpeg"
+            }
+        ]
+    }
 
-@app.route('/generate', methods=['POST'])
-def generate():
-    from flask import request
-    intent = request.form['intent']
-    category = request.form['category']
-    game_industry = request.form.get('game_industry', '')
-    audience = request.form['audience']
-    
-    # Fallback strategy if OpenAI client fails
-    if client is None:
-        strategy = f"""
-🎯 E-Volve.ai Strategy for {intent}
+@app.route('/sw.js')
+def service_worker():
+    return '''
+    const CACHE_NAME = 'evolve-ai-v1';
+    const urlsToCache = [
+        '/',
+        '/static/icon-192.jpg',
+        '/static/icon-512.jpg'
+    ];
 
-🎬 KILLER HOOK (0-3 seconds):
-"Stop scrolling! This {category} tip will change everything..."
+    self.addEventListener('install', function(event) {
+        event.waitUntil(
+            caches.open(CACHE_NAME)
+                .then(function(cache) {
+                    return cache.addAll(urlsToCache);
+                })
+        );
+    });
 
-📝 SCRIPT OUTLINE:
-- Hook: Grab attention with bold claim
-- Problem: Address common {audience} pain point
-- Solution: Your {intent} approach
-- Proof: Quick example or result
-- CTA: "Follow for more {category} tips!"
+    self.addEventListener('fetch', function(event) {
+        event.respondWith(
+            caches.match(event.request)
+                .then(function(response) {
+                    if (response) {
+                        return response;
+                    }
+                    return fetch(event.request);
+                })
+        );
+    });
+    ''', 200, {'Content-Type': 'application/javascript'}
 
-📱 VISUAL INSTRUCTIONS:
-- Start with close-up face shot
-- Quick cuts every 2-3 seconds
-- Show {game_industry} gameplay/examples
-- End with clear branding
-
-#️⃣ HASHTAGS:
-#{category} #{audience} #tips #viral #fyp #trending
-
-⏰ OPTIMAL POSTING TIME:
-7-9 PM EST (peak {audience} activity)
-
-🔥 ENGAGEMENT TACTICS:
-- Ask question in caption
-- Pin comment with follow-up
-- Respond to all comments quickly
-
-💪 CALL-TO-ACTION:
-"Join our Discord for exclusive {category} strategies!"
-        """
-    else:
-        # Try OpenAI first
-        try:
-            prompt = f"You are E-Volve.ai, a TikTok strategist for LVX Labs. Create a strategy for: {intent}, Category: {category}, Industry: {game_industry}, Audience: {audience}. Include: 1. Hook 2. Script 3. Hashtags 4. Timing 5. Engagement tactics"
-            
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1000
-            )
-            strategy = response.choices[0].message.content
-        except Exception as e:
-            # Fallback to template
-            strategy = f"""
-🎯 E-Volve.ai Strategy for {intent}
-
-🎬 KILLER HOOK (0-3 seconds):
-"Stop scrolling! This {category} tip will change everything..."
-
-📝 SCRIPT OUTLINE:
-- Hook: Grab attention with bold claim
-- Problem: Address common {audience} pain point  
-- Solution: Your {intent} approach
-- Proof: Quick example or result
-- CTA: "Follow for more {category} tips!"
-
-📱 VISUAL INSTRUCTIONS:
-- Start with close-up face shot
-- Quick cuts every 2-3 seconds
-- Show {game_industry} gameplay/examples
-- End with clear branding
-
-#️⃣ HASHTAGS:
-#{category} #{audience} #tips #viral #fyp #trending
-
-⏰ OPTIMAL POSTING TIME:
-7-9 PM EST (peak {audience} activity)
-
-🔥 ENGAGEMENT TACTICS:
-- Ask question in caption
-- Pin comment with follow-up
-- Respond to all comments quickly
-
-💪 CALL-TO-ACTION:
-"Join our Discord for exclusive {category} strategies!"
-            """
-    
-    return f'''<style>body{{background:#000;color:#fff;font-family:Arial;max-width:1000px;margin:0 auto;padding:20px}}.container{{background:#1a1a1a;padding:30px;border-radius:10px;border:2px solid #00ff00}}.strategy{{background:#2d2d2d;padding:20px;border-radius:8px;white-space:pre-wrap;line-height:1.6}}.back-btn{{background:#00ff00;color:#000;padding:10px 20px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:20px}}h2{{color:#00ff00;margin-bottom:20px}}</style><div class="container"><h2>🎯 Your E-Volve.ai Strategy</h2><div class="strategy">{strategy}</div><a href="/" class="back-btn">← Create Another Strategy</a></div>'''
-
+@app.route('/')
 def home():
     return '''<!DOCTYPE html>
 <html><head>
@@ -232,18 +201,44 @@ def generate():
     game_industry = request.form.get('game_industry', '')
     audience = request.form['audience']
     
-    prompt = f"You are E-Volve.ai, a TikTok strategist for LVX Labs. Create a strategy for: {intent}, Category: {category}, Industry: {game_industry}, Audience: {audience}. Include: 1. Hook 2. Script 3. Hashtags 4. Timing 5. Engagement tactics"
+    # Create strategy using template (works without OpenAI)
+    strategy = f"""🎯 E-Volve.ai Strategy for {intent}
+
+🎬 KILLER HOOK (0-3 seconds):
+"Stop scrolling! This {category} tip will change everything..."
+
+📝 SCRIPT OUTLINE:
+- Hook: Grab attention with bold claim
+- Problem: Address common {audience} pain point
+- Solution: Your {intent} approach
+- Proof: Quick example or result
+- CTA: "Follow for more {category} tips!"
+
+📱 VISUAL INSTRUCTIONS:
+- Start with close-up face shot
+- Quick cuts every 2-3 seconds
+- Show {game_industry} gameplay/examples
+- End with clear LVX Labs branding
+
+#️⃣ HASHTAGS:
+#{category.replace(' ', '')} #{audience.replace(' ', '')} #tips #viral #fyp #trending #lvxlabs
+
+⏰ OPTIMAL POSTING TIME:
+7-9 PM EST (peak {audience} activity)
+
+🔥 ENGAGEMENT TACTICS:
+- Ask question in caption
+- Pin comment with follow-up
+- Respond to all comments quickly
+- Cross-promote on Discord
+
+💪 CALL-TO-ACTION:
+"Join our Discord for exclusive {category} strategies!"
+
+⚡ POWERED BY LVX LABS & METAFYZICAL SMART ENERGY
+"""
     
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000
-        )
-        strategy = response.choices[0].message.content
-        return f'''<style>body{{background:#000;color:#fff;font-family:Arial;max-width:1000px;margin:0 auto;padding:20px}}.container{{background:#1a1a1a;padding:30px;border-radius:10px;border:2px solid #00ff00}}.strategy{{background:#2d2d2d;padding:20px;border-radius:8px;white-space:pre-wrap;line-height:1.6}}.back-btn{{background:#00ff00;color:#000;padding:10px 20px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:20px}}h2{{color:#00ff00;margin-bottom:20px}}</style><div class="container"><h2>🎯 Your E-Volve.ai Strategy</h2><div class="strategy">{strategy}</div><a href="/" class="back-btn">← Create Another Strategy</a></div>'''
-    except Exception as e:
-        return f'<div style="background:#1a1a1a;color:#fff;padding:20px;text-align:center;"><h2 style="color:#ff0000;">Error</h2><p>{str(e)}</p><a href="/" style="background:#00ff00;color:#000;padding:10px 20px;text-decoration:none;border-radius:5px;">← Try Again</a></div>'
+    return f'''<style>body{{background:#000;color:#fff;font-family:Arial;max-width:1000px;margin:0 auto;padding:20px}}.container{{background:#1a1a1a;padding:30px;border-radius:10px;border:2px solid #00ff00}}.strategy{{background:#2d2d2d;padding:20px;border-radius:8px;white-space:pre-wrap;line-height:1.6}}.back-btn{{background:#00ff00;color:#000;padding:10px 20px;text-decoration:none;border-radius:5px;display:inline-block;margin-top:20px}}h2{{color:#00ff00;margin-bottom:20px}}</style><div class="container"><h2>🎯 Your E-Volve.ai Strategy</h2><div class="strategy">{strategy}</div><a href="/" class="back-btn">← Create Another Strategy</a></div>'''
 
 if __name__ == '__main__':
     print("🚀 E-Volve.ai PWA is starting up...")
